@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import torch
+import torch, torchvision
 
 from sklearn.datasets import make_moons
 from torch.utils.data import TensorDataset
@@ -53,6 +53,13 @@ def dino_dataset(n=8000):
     X = np.stack((x, y), axis=1)
     return TensorDataset(torch.from_numpy(X.astype(np.float32)))
 
+def mnist_dataset(n=8000):
+    print("WARMING: n is ignored in the mnist_dataset function.")
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor().
+        torchvision.transforms.Normalize((0.1307,), (0.3081,))
+    ])
+    return torchvision.datasets.MNIST("exps/", train=True, download=True, transform=transform)
 
 def get_dataset(name, n=8000):
     if name == "moons":
@@ -63,5 +70,7 @@ def get_dataset(name, n=8000):
         return line_dataset(n)
     elif name == "circle":
         return circle_dataset(n)
+    elif name == "mnist":
+        return mnist_dataset(n)
     else:
         raise ValueError(f"Unknown dataset: {name}")
