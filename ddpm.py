@@ -72,7 +72,7 @@ class CNN(nn.Module):
     
     def forward(self, x, t):
         t_emb = self.time_emb(t)
-        x = self.cnn(x)
+        x = self.cnn(x.unsqueeze(0))
         x = torch.cat((x, t_emb), dim=-1)
         return self.mlp(x)
 
@@ -153,8 +153,13 @@ class NoiseScheduler():
 
         s1 = s1.reshape(-1, 1)
         s2 = s2.reshape(-1, 1)
+        print(s1.shape, s2.shape)
+        print(x_start.shape)
 
-        return s1 * x_start + s2 * x_noise
+        batch, *rest = x_start.shape
+        new = (s1 * x_start.reshape(batch, -1) + s2 * x_noise.reshape(batch, -1)).reshape(batch, *rest)
+        print(x_start.shape, new.shape)
+        return (s1 * x_start.reshape(batch, -1) + s2 * x_noise.reshape(batch, -1)).reshape(batch, *rest)
 
     def __len__(self):
         return self.num_timesteps
@@ -255,8 +260,8 @@ def train_mnist(config):
         dataset, batch_size=config.train_batch_size, shuffle=True, drop_last=True)
 
     model = CNN(
-        emmb_size=config.embedding_size,
-        time_emb=config.time_ebedding,
+        emb_size=config.embedding_size,
+        time_emb=config.time_embedding,
         )
     
     noise_scheduler = NoiseScheduler(
@@ -277,6 +282,8 @@ def train_mnist(config):
         progress_bar = tqdm(total=len(dataloader))
         progress_bar.set_description(f"Epoch {epoch}")
         for inputs, _ in dataloader:
+            inputs = inputs.squeeze(1)
+            print(inputs.shape)
             noise = torch.randn(inputs.shape)
             timesteps = torch.randint(
                 0, noise_scheduler.num_timesteps, (inputs.shape[0],)
@@ -338,7 +345,7 @@ def train_mnist(config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment_name", type=str, default="base")
-    parser.add_argument("--dataset", type=str, default="dino", choices=["circle", "dino", "line", "moons", "mnist"])
+    parser.add_argument("--dataset", type=str, default="mnist", choices=["circle", "dino", "line", "moons", "mnist"])
     parser.add_argument("--train_batch_size", type=int, default=32)
     parser.add_argument("--eval_batch_size", type=int, default=1000)
     parser.add_argument("--num_epochs", type=int, default=200)

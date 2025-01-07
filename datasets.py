@@ -56,7 +56,7 @@ def dino_dataset(n=8000):
 def mnist_dataset(n=8000):
     print("WARMING: n is ignored in the mnist_dataset function.")
     transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor().
+        torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.1307,), (0.3081,))
     ])
     return torchvision.datasets.MNIST("exps/", train=True, download=True, transform=transform)
