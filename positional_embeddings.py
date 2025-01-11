@@ -4,6 +4,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print('Using gpu: %s ' % torch.cuda.is_available())
 
 class SinusoidalEmbedding(nn.Module):
     def __init__(self, size: int, scale: float = 1.0):
@@ -16,6 +18,7 @@ class SinusoidalEmbedding(nn.Module):
         half_size = self.size // 2
         emb = torch.log(torch.Tensor([10000.0])) / (half_size - 1)
         emb = torch.exp(-emb * torch.arange(half_size))
+        emb = emb.to(device)
         emb = x.unsqueeze(-1) * emb.unsqueeze(0)
         emb = torch.cat((torch.sin(emb), torch.cos(emb)), dim=-1)
         return emb
