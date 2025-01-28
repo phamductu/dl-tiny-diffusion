@@ -1,9 +1,8 @@
 import numpy as np
 import pandas as pd
 import torch, torchvision
-
 from sklearn.datasets import make_moons
-from torch.utils.data import TensorDataset, Subset
+from torch.utils.data import TensorDataset
 
 def moons_dataset(n=8000):
     X, _ = make_moons(n_samples=n, random_state=42, noise=0.03)
