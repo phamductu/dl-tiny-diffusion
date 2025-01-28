@@ -1,13 +1,9 @@
 import argparse
 import os
-
 import torch
-import torchvision
+import numpy as np
 from torchvision.utils import save_image
 from tqdm.auto import tqdm
-
-import numpy as np
-
 from ddpm import NoiseScheduler
 from model import UNet
 
@@ -28,7 +24,8 @@ def gen(model, sample_shape, config, capture_gap = 50):
     for i, t in enumerate(tqdm(timesteps)):
         t = torch.from_numpy(np.repeat(t, 1)).long()
         t = t.to(device)
-        num = torch.from_numpy(np.repeat(1, 1)).long()
+        num = torch.from_numpy(np.repeat(7, 1)).long()
+        num = num.to(device)
         with torch.no_grad():
             residual = model(sample, t, num)
         sample = noise_scheduler.step(residual.reshape(sample_shape), t, sample)
@@ -83,6 +80,8 @@ if __name__ == "__main__":
     config = parser.parse_args()
 
     model = UNet()
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Number of parameters: {total_params}")
 
     path = "exps/base/model.pth"
     model.load_state_dict(torch.load(path, weights_only=True))

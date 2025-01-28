@@ -61,7 +61,8 @@ def mnist_dataset():
 def cifar10_dataset():
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.1307,), (0.3081,))
+        torchvision.transforms.Normalize(mean=(0.4914, 0.4822, 0.4465), 
+                             std=(0.2470, 0.2435, 0.2616))
     ])
     return torchvision.datasets.CIFAR10("exps/", train=True, download=True, transform=transform)
 
