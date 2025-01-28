@@ -338,6 +338,7 @@ def train_mnist(config):
                 0, noise_scheduler.num_timesteps, (inputs.shape[0],)
             ).long()
             inputs, noise, t = inputs.to(device), noise.to(device), t.to(device)
+            labels = labels.to(device)
 
             noisy = noise_scheduler.add_noise(inputs, noise, t)
             noise_pred = model(noisy, t, labels)

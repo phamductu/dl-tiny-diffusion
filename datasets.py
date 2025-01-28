@@ -52,13 +52,19 @@ def dino_dataset(n=8000):
     X = np.stack((x, y), axis=1)
     return TensorDataset(torch.from_numpy(X.astype(np.float32)))
 
-def mnist_dataset(n=8000):
-    print("WARMING: n is ignored in the mnist_dataset function.")
+def mnist_dataset():
     transform = torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.1307,), (0.3081,))
     ])
     return torchvision.datasets.MNIST("exps/", train=True, download=True, transform=transform)
+
+def cifar10_dataset():
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.1307,), (0.3081,))
+    ])
+    return torchvision.datasets.CIFAR10("exps/", train=True, download=True, transform=transform)
 
 def get_dataset(name, n=8000):
     if name == "moons":
@@ -70,6 +76,8 @@ def get_dataset(name, n=8000):
     elif name == "circle":
         return circle_dataset(n)
     elif name == "mnist":
-        return mnist_dataset(n)
+        return mnist_dataset()
+    elif name == "cifar10":
+        return cifar10_dataset()
     else:
         raise ValueError(f"Unknown dataset: {name}")

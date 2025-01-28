@@ -26,8 +26,9 @@ def gen(model, sample_shape, config, capture_gap = 50):
     for i, t in enumerate(tqdm(timesteps)):
         t = torch.from_numpy(np.repeat(t, 1)).long()
         t = t.to(device)
+        num = torch.from_numpy(np.repeat(1, 1)).long()
         with torch.no_grad():
-            residual = model(sample, t)
+            residual = model(sample, t, num)
         sample = noise_scheduler.step(residual.reshape(sample_shape), t, sample)
         if i%capture_gap == 0 or i == config.num_timesteps-1:
             frames.append(sample.squeeze(0))
