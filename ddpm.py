@@ -12,6 +12,7 @@ import numpy as np
 
 import datasets
 from positional_embeddings import PositionalEmbedding
+from attention import SpatialCrossAttention
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('Using gpu: %s ' % torch.cuda.is_available())
@@ -61,10 +62,13 @@ class Dense(nn.Module):
         return self.dense(x).unsqueeze(2).unsqueeze(3)
 
 class UNet(nn.Module):
-    def __init__(self, channels=[32, 64, 128, 256], embed_dim=128):
+    def __init__(self, channels=[32, 64, 128, 256], embed_dim=128, num_class=10, context_dim=128):
         super().__init__()
         self.time_embedding = PositionalEmbedding(embed_dim, "sinusoidal")
         self.act = nn.SiLU()
+        
+        # Considtional embedding
+        self.cond_embedding = nn.Embedding(num_class, context_dim)
         
         # Encoding blocks
         self.conv1 = nn.Conv2d(1, channels[0], 3, stride=1, bias=False)
@@ -78,10 +82,12 @@ class UNet(nn.Module):
         self.conv3 = nn.Conv2d(channels[1], channels[2], 3, stride=2, bias=False)
         self.dense3 = Dense(embed_dim, channels[2])
         self.gnorm3 = nn.GroupNorm(32, num_channels=channels[2])
-
+        self.atten3 = SpatialCrossAttention(channels[2], context_dim)
+        
         self.conv4 = nn.Conv2d(channels[2], channels[3], 3, stride=2, bias=False)
         self.dense4 = Dense(embed_dim, channels[3])
         self.gnorm4 = nn.GroupNorm(32, num_channels=channels[3])
+        self.atten4 = SpatialCrossAttention(channels[3], context_dim)
 
         # Decoding blocks
         self.tconv4 = nn.ConvTranspose2d(channels[3], channels[2], 3, stride=2, bias=False)
@@ -99,16 +105,19 @@ class UNet(nn.Module):
         self.tconv1 = nn.ConvTranspose2d(channels[0], 1, 3, stride=1)
 
 
-    def forward(self, x, t):
+    def forward(self, x, t, y=None):
         # Embed time
         t_emb = self.act(self.time_embedding(t))
+        y_emb = self.cond_embedding(y).unsqueeze(1)
 
         # Encoding
         h1 = self.act(self.gnorm1(self.conv1(x) + self.dense1(t_emb)))
         h2 = self.act(self.gnorm2(self.conv2(h1) + self.dense2(t_emb)))
         h3 = self.act(self.gnorm3(self.conv3(h2) + self.dense3(t_emb)))
+        h3 = self.atten3(h3, y_emb)
         h4 = self.act(self.gnorm4(self.conv4(h3) + self.dense4(t_emb)))
-
+        h4 = self.atten4(h4, y_emb)
+        
         # Decoding
         h = self.act(self.tgnorm4(self.tconv4(h4) + self.dense5(t_emb)))
         h = self.act(self.tgnorm3(self.tconv3(h + h3) + self.dense6(t_emb)))
@@ -323,7 +332,7 @@ def train_mnist(config):
     for epoch in range(config.num_epochs):
         progress_bar = tqdm(total=len(dataloader))
         progress_bar.set_description(f"Epoch {epoch}")
-        for inputs, _ in dataloader:
+        for inputs, labels in dataloader:
             noise = torch.randn(inputs.shape)
             t = torch.randint(
                 0, noise_scheduler.num_timesteps, (inputs.shape[0],)
@@ -331,7 +340,7 @@ def train_mnist(config):
             inputs, noise, t = inputs.to(device), noise.to(device), t.to(device)
 
             noisy = noise_scheduler.add_noise(inputs, noise, t)
-            noise_pred = model(noisy, t)
+            noise_pred = model(noisy, t, labels)
             loss = F.mse_loss(noise_pred, noise)
             loss.backward()
 
