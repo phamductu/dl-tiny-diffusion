@@ -159,8 +159,6 @@ def train_mnist(config):
     print("Saving loss as numpy array...")
     np.save(f"{outdir}/loss.npy", np.array(losses))
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment_name", type=str, default="base")
@@ -168,7 +166,7 @@ if __name__ == "__main__":
     parser.add_argument("--train_batch_size", type=int, default=32)
     parser.add_argument("--eval_batch_size", type=int, default=1000)
     parser.add_argument("--num_epochs", type=int, default=100)
-    parser.add_argument("--learning_rate", type=float, default=1e-3)
+    parser.add_argument("--learning_rate", type=float, default=2e-4)
     parser.add_argument("--num_timesteps", type=int, default=1000)
     parser.add_argument("--beta_schedule", type=str, default="linear", choices=["linear", "quadratic"])
     parser.add_argument("--embedding_size", type=int, default=128)
