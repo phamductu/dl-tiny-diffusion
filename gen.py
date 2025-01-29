@@ -24,7 +24,7 @@ def gen(model, sample_shape, config, capture_gap = 50):
     for i, t in enumerate(tqdm(timesteps)):
         t = torch.from_numpy(np.repeat(t, 1)).long()
         t = t.to(device)
-        num = torch.from_numpy(np.repeat(7, 1)).long()
+        num = torch.from_numpy(np.repeat(0, 1)).long()
         num = num.to(device)
         with torch.no_grad():
             residual = model(sample, t, num)

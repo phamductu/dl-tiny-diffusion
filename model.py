@@ -234,7 +234,7 @@ class SpatialCrossAttention(nn.Module):
         return x + x_in
 
 class UNet(nn.Module):
-    def __init__(self, channels=[32, 64, 128, 256], embed_dim=256, num_class=10, context_dim=256):
+    def __init__(self, channels=[32, 64, 128, 256, 512], embed_dim=256, num_class=10, context_dim=256):
         super().__init__()
         self.time_embedding = nn.Sequential(
             PositionalEmbedding(embed_dim, "sinusoidal"),
@@ -250,38 +250,48 @@ class UNet(nn.Module):
         self.dropout = nn.Dropout(p=0.1)
 
         # Encoding blocks
-        self.conv1 = nn.Conv2d(1, channels[0], 3, stride=1, bias=False)
+        self.conv1 = nn.Conv2d(1, channels[0], 3, stride=1, padding=1, bias=False)
         self.dense1 = Dense(embed_dim, channels[0])
         self.gnorm1 = nn.GroupNorm(4, num_channels=channels[0])
 
-        self.conv2 = nn.Conv2d(channels[0], channels[1], 3, stride=2, bias=False)
+        self.conv2 = nn.Conv2d(channels[0], channels[1], 3, stride=2, padding=1, bias=False)
         self.dense2 = Dense(embed_dim, channels[1])
         self.gnorm2 = nn.GroupNorm(32, num_channels=channels[1])
+        self.atten2 = SpatialCrossAttention(channels[1], context_dim)
 
-        self.conv3 = nn.Conv2d(channels[1], channels[2], 3, stride=2, bias=False)
+        self.conv3 = nn.Conv2d(channels[1], channels[2], 3, stride=2, padding=1, bias=False)
         self.dense3 = Dense(embed_dim, channels[2])
         self.gnorm3 = nn.GroupNorm(32, num_channels=channels[2])
         self.atten3 = SpatialCrossAttention(channels[2], context_dim)
         
-        self.conv4 = nn.Conv2d(channels[2], channels[3], 3, stride=2, bias=False)
+        self.conv4 = nn.Conv2d(channels[2], channels[3], 3, stride=2, padding=1, bias=False)
         self.dense4 = Dense(embed_dim, channels[3])
         self.gnorm4 = nn.GroupNorm(32, num_channels=channels[3])
         self.atten4 = SpatialCrossAttention(channels[3], context_dim)
 
+        self.conv5 = nn.Conv2d(channels[3], channels[4], 3, stride=1, padding=1, bias=False)
+        self.dense5 = Dense(embed_dim, channels[4])
+        self.gnorm5 = nn.GroupNorm(32, num_channels=channels[4])
+        self.atten5 = SpatialCrossAttention(channels[4], context_dim)
+
         # Decoding blocks
-        self.tconv4 = nn.ConvTranspose2d(channels[3], channels[2], 3, stride=2, bias=False)
-        self.dense5 = Dense(embed_dim, channels[2])
+        self.tconv5 = nn.ConvTranspose2d(channels[4], channels[3], 3, stride=1, padding=1, bias=False)
+        self.dense6 = Dense(embed_dim, channels[3])
+        self.tgnorm5 = nn.GroupNorm(32, num_channels=channels[3])
+
+        self.tconv4 = nn.ConvTranspose2d(channels[3], channels[2], 3, stride=2, padding=1, bias=False)
+        self.dense7 = Dense(embed_dim, channels[2])
         self.tgnorm4 = nn.GroupNorm(32, num_channels=channels[2])
 
-        self.tconv3 = nn.ConvTranspose2d(channels[2], channels[1], 3, stride=2, bias=False, output_padding=1)
-        self.dense6 = Dense(embed_dim, channels[1])
+        self.tconv3 = nn.ConvTranspose2d(channels[2], channels[1], 3, stride=2, padding=1, bias=False, output_padding=1)
+        self.dense8 = Dense(embed_dim, channels[1])
         self.tgnorm3 = nn.GroupNorm(32, num_channels=channels[1])
 
-        self.tconv2 = nn.ConvTranspose2d(channels[1], channels[0], 3, stride=2, bias=False, output_padding=1)
-        self.dense7 = Dense(embed_dim, channels[0])
+        self.tconv2 = nn.ConvTranspose2d(channels[1], channels[0], 3, stride=2, padding=1, bias=False, output_padding=1)
+        self.dense9 = Dense(embed_dim, channels[0])
         self.tgnorm2 = nn.GroupNorm(32, num_channels=channels[0])
 
-        self.tconv1 = nn.ConvTranspose2d(channels[0], 1, 3, stride=1)
+        self.tconv1 = nn.ConvTranspose2d(channels[0], 1, 3, stride=1, padding=1)
 
 
     def forward(self, x, t, y=None):
@@ -292,15 +302,19 @@ class UNet(nn.Module):
         # Encoding
         h1 = self.dropout(self.act(self.gnorm1(self.conv1(x) + self.dense1(t_emb))))
         h2 = self.dropout(self.act(self.gnorm2(self.conv2(h1) + self.dense2(t_emb))))
+        h2 = self.atten2(h2, y_emb)
         h3 = self.dropout(self.act(self.gnorm3(self.conv3(h2) + self.dense3(t_emb))))
         h3 = self.atten3(h3, y_emb)
         h4 = self.dropout(self.act(self.gnorm4(self.conv4(h3) + self.dense4(t_emb))))
         h4 = self.atten4(h4, y_emb)
-        
+        h5 = self.dropout(self.act(self.gnorm5(self.conv5(h4) + self.dense5(t_emb))))
+        h5 = self.atten5(h5, y_emb)
+
         # Decoding
-        h = self.dropout(self.act(self.tgnorm4(self.tconv4(h4) + self.dense5(t_emb))))
-        h = self.dropout(self.act(self.tgnorm3(self.tconv3(h + h3) + self.dense6(t_emb))))
-        h = self.dropout(self.act(self.tgnorm2(self.tconv2(h + h2) + self.dense7(t_emb))))
+        h = self.dropout(self.act(self.tgnorm5(self.tconv5(h5) + self.dense6(t_emb))))
+        h = self.dropout(self.act(self.tgnorm4(self.tconv4(h + h4) + self.dense7(t_emb))))
+        h = self.dropout(self.act(self.tgnorm3(self.tconv3(h + h3) + self.dense8(t_emb))))
+        h = self.dropout(self.act(self.tgnorm2(self.tconv2(h + h2) + self.dense9(t_emb))))
         h = self.tconv1(h+h1)
 
         return h
