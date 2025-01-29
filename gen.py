@@ -1,6 +1,6 @@
 import argparse
 import os
-import torch
+import torch, torchvision
 import numpy as np
 from torchvision.utils import save_image
 from tqdm.auto import tqdm

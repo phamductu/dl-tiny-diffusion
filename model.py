@@ -52,107 +52,20 @@ class Dense(nn.Module):
     def forward(self, x):
         return self.dense(x).unsqueeze(2).unsqueeze(3)
 
-class Attention(nn.Module):
-    """
-    Implements a single-head attention mechanism. This class supports both self-attention
-    and cross-attention depending on the context provided.
-
-    Args:
-        embed_dim (int): The dimensionality of the embedding space.
-        hidden_dim (int): The dimensionality of the hidden states.
-        context_dim (int, optional): The dimensionality of the context for cross-attention. 
-                                     If None, self-attention is performed.
-        num_heads (int, optional): The number of attention heads. Default is 1.
-    """
-    def __init__(self, embed_dim, hidden_dim, context_dim=None, num_heads=1):
-        super().__init__()
-        self.query = nn.Linear(hidden_dim, embed_dim, bias=False)
-        if context_dim is None:
-            self.self_attn = True
-            self.key = nn.Linear(hidden_dim, embed_dim, bias=False)
-            self.value = nn.Linear(hidden_dim, hidden_dim, bias=False)
-        else:
-            self.self_attn = False
-            self.key = nn.Linear(context_dim, embed_dim, bias=False)
-            self.value = nn.Linear(context_dim, hidden_dim, bias=False)
-
-    def forward(self, tokens, context=None):
-        if self.self_attn:
-            Q, K, V = self.query(tokens), self.key(tokens), self.value(tokens)
-        else:
-            Q, K, V = self.query(tokens), self.key(context), self.value(context)
-        
-        scoremats = torch.einsum('bth,bsh->bts', Q, K)
-        attnmats = F.softmax(scoremats, dim=1)
-        ctx_vecs = torch.einsum("bts,bsh->bth", attnmats, V)
-        return ctx_vecs
-
-class TransformerBlock(nn.Module):
-    """
-    Implements a Transformer block that includes self-attention, cross-attention, 
-    and a feed-forward network with normalization layers.
-
-    Args:
-        hidden_dim (int): The dimensionality of the hidden states.
-        context_dim (int): The dimensionality of the context for cross-attention.
-    """
-    def __init__(self, hidden_dim, context_dim):
-        super().__init__()
-        self.attn_self = Attention(hidden_dim, hidden_dim)
-        self.attn_cross = Attention(hidden_dim, hidden_dim, context_dim)
-        self.norm1 = nn.LayerNorm(hidden_dim)
-        self.norm2 = nn.LayerNorm(hidden_dim)
-        self.norm3 = nn.LayerNorm(hidden_dim)
-        self.ffn = nn.Sequential(
-            nn.Linear(hidden_dim, 4*hidden_dim),
-            nn.GELU(),
-            nn.Linear(4*hidden_dim, hidden_dim),
-            nn.GELU()
-        )
-
-    def forward(self, x, context=None):
-        x = self.attn_self(self.norm1(x)) + x
-        x = self.attn_cross(self.norm2(x), context=context) + x
-        x = self.ffn(self.norm3(x)) + x
-        return x
-
-class SpatialCrossAttention(nn.Module):
-    """
-    Implements a Spatial Cross Attention that applies a Transformer block to spatial data, 
-    typically images. This allows spatial interactions within the Transformer architecture.
-
-    Args:
-        hidden_dim (int): The dimensionality of the hidden states.
-        context_dim (int): The dimensionality of the context for cross-attention.
-    """
-    def __init__(self, hidden_dim, context_dim):
-        super().__init__()
-        self.transformer = TransformerBlock(hidden_dim, context_dim)
-
-    def forward(self, x, context=None):
-        b, c, h, w = x.shape
-        x_in = x
-        x = rearrange(x, "b c h w -> b (h w) c")
-        x = self.transformer(x, context)
-        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)
-        return x + x_in
-
 # class Attention(nn.Module):
 #     """
-#     Implements multi-head attention mechanism. Supports both self-attention and cross-attention.
+#     Implements a single-head attention mechanism. This class supports both self-attention
+#     and cross-attention depending on the context provided.
 
 #     Args:
 #         embed_dim (int): The dimensionality of the embedding space.
 #         hidden_dim (int): The dimensionality of the hidden states.
 #         context_dim (int, optional): The dimensionality of the context for cross-attention. 
 #                                      If None, self-attention is performed.
-#         num_heads (int): The number of attention heads.
+#         num_heads (int, optional): The number of attention heads. Default is 1.
 #     """
 #     def __init__(self, embed_dim, hidden_dim, context_dim=None, num_heads=1):
 #         super().__init__()
-#         self.num_heads = num_heads
-#         self.head_dim = embed_dim // num_heads
-#         assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
 #         self.query = nn.Linear(hidden_dim, embed_dim, bias=False)
 #         if context_dim is None:
 #             self.self_attn = True
@@ -162,46 +75,38 @@ class SpatialCrossAttention(nn.Module):
 #             self.self_attn = False
 #             self.key = nn.Linear(context_dim, embed_dim, bias=False)
 #             self.value = nn.Linear(context_dim, hidden_dim, bias=False)
-#         self.out_proj = nn.Linear(embed_dim, hidden_dim)
 
 #     def forward(self, tokens, context=None):
-#         batch_size = tokens.size(0)
 #         if self.self_attn:
 #             Q, K, V = self.query(tokens), self.key(tokens), self.value(tokens)
 #         else:
 #             Q, K, V = self.query(tokens), self.key(context), self.value(context)
-#         Q = Q.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-#         K = K.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-#         V = V.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        
+#         scoremats = torch.einsum('bth,bsh->bts', Q, K)
+#         attnmats = F.softmax(scoremats, dim=1)
+#         ctx_vecs = torch.einsum("bts,bsh->bth", attnmats, V)
+#         return ctx_vecs
 
-#         scoremats = torch.einsum('bqhd,bkhd->bqhk', Q, K)
-#         attnmats = F.softmax(scoremats / (self.head_dim ** 0.5), dim=-1)  # Scale dot-product attention
-#         ctx_vecs = torch.einsum('bqhk,bvhd->bqhd', attnmats, V)
-#         ctx_vecs = ctx_vecs.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.head_dim)
-#         output = self.out_proj(ctx_vecs)
-#         return output
-    
 # class TransformerBlock(nn.Module):
 #     """
-#     Implements a Transformer block with multi-head self-attention, cross-attention, 
+#     Implements a Transformer block that includes self-attention, cross-attention, 
 #     and a feed-forward network with normalization layers.
 
 #     Args:
 #         hidden_dim (int): The dimensionality of the hidden states.
 #         context_dim (int): The dimensionality of the context for cross-attention.
-#         num_heads (int): The number of attention heads.
 #     """
-#     def __init__(self, hidden_dim, context_dim, num_heads=4):
+#     def __init__(self, hidden_dim, context_dim):
 #         super().__init__()
-#         self.attn_self = Attention(hidden_dim, hidden_dim, num_heads=num_heads)
-#         self.attn_cross = Attention(hidden_dim, hidden_dim, context_dim=context_dim, num_heads=num_heads)
+#         self.attn_self = Attention(hidden_dim, hidden_dim)
+#         self.attn_cross = Attention(hidden_dim, hidden_dim, context_dim)
 #         self.norm1 = nn.LayerNorm(hidden_dim)
 #         self.norm2 = nn.LayerNorm(hidden_dim)
 #         self.norm3 = nn.LayerNorm(hidden_dim)
 #         self.ffn = nn.Sequential(
-#             nn.Linear(hidden_dim, 4 * hidden_dim),
+#             nn.Linear(hidden_dim, 4*hidden_dim),
 #             nn.GELU(),
-#             nn.Linear(4 * hidden_dim, hidden_dim),
+#             nn.Linear(4*hidden_dim, hidden_dim),
 #             nn.GELU()
 #         )
 
@@ -210,20 +115,19 @@ class SpatialCrossAttention(nn.Module):
 #         x = self.attn_cross(self.norm2(x), context=context) + x
 #         x = self.ffn(self.norm3(x)) + x
 #         return x
-    
+
 # class SpatialCrossAttention(nn.Module):
 #     """
-#     Implements a Spatial Cross Attention with multi-head attention applied to spatial data, 
-#     typically images.
+#     Implements a Spatial Cross Attention that applies a Transformer block to spatial data, 
+#     typically images. This allows spatial interactions within the Transformer architecture.
 
 #     Args:
 #         hidden_dim (int): The dimensionality of the hidden states.
 #         context_dim (int): The dimensionality of the context for cross-attention.
-#         num_heads (int): The number of attention heads.
 #     """
-#     def __init__(self, hidden_dim, context_dim, num_heads=4):
+#     def __init__(self, hidden_dim, context_dim):
 #         super().__init__()
-#         self.transformer = TransformerBlock(hidden_dim, context_dim, num_heads=num_heads)
+#         self.transformer = TransformerBlock(hidden_dim, context_dim)
 
 #     def forward(self, x, context=None):
 #         b, c, h, w = x.shape
@@ -233,10 +137,110 @@ class SpatialCrossAttention(nn.Module):
 #         x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)
 #         return x + x_in
 
-class UNet(nn.Module):
-    def __init__(self, channels=[32, 64, 128, 256], embed_dim=128, num_class=10, context_dim=128):
+class Attention(nn.Module):
+    """
+    Implements multi-head attention mechanism. Supports both self-attention and cross-attention.
+
+    Args:
+        embed_dim (int): The dimensionality of the embedding space.
+        hidden_dim (int): The dimensionality of the hidden states.
+        context_dim (int, optional): The dimensionality of the context for cross-attention. 
+                                     If None, self-attention is performed.
+        num_heads (int): The number of attention heads.
+    """
+    def __init__(self, embed_dim, hidden_dim, context_dim=None, num_heads=8):
         super().__init__()
-        self.time_embedding = PositionalEmbedding(embed_dim, "sinusoidal")
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
+        self.query = nn.Linear(hidden_dim, embed_dim, bias=False)
+        if context_dim is None:
+            self.self_attn = True
+            self.key = nn.Linear(hidden_dim, embed_dim, bias=False)
+            self.value = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        else:
+            self.self_attn = False
+            self.key = nn.Linear(context_dim, embed_dim, bias=False)
+            self.value = nn.Linear(context_dim, hidden_dim, bias=False)
+        self.out_proj = nn.Linear(embed_dim, hidden_dim)
+
+    def forward(self, tokens, context=None):
+        batch_size = tokens.size(0)
+        if self.self_attn:
+            Q, K, V = self.query(tokens), self.key(tokens), self.value(tokens)
+        else:
+            Q, K, V = self.query(tokens), self.key(context), self.value(context)
+        Q = Q.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        K = K.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        V = V.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
+        scoremats = torch.einsum('bqhd,bkhd->bqhk', Q, K)
+        attnmats = F.softmax(scoremats / (self.head_dim ** 0.5), dim=-1)  # Scale dot-product attention
+        ctx_vecs = torch.einsum('bqhk,bvhd->bqhd', attnmats, V)
+        ctx_vecs = ctx_vecs.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.head_dim)
+        output = self.out_proj(ctx_vecs)
+        return output
+    
+class TransformerBlock(nn.Module):
+    """
+    Implements a Transformer block with multi-head self-attention, cross-attention, 
+    and a feed-forward network with normalization layers.
+
+    Args:
+        hidden_dim (int): The dimensionality of the hidden states.
+        context_dim (int): The dimensionality of the context for cross-attention.
+        num_heads (int): The number of attention heads.
+    """
+    def __init__(self, hidden_dim, context_dim, num_heads=8):
+        super().__init__()
+        self.attn_self = Attention(hidden_dim, hidden_dim, num_heads=num_heads)
+        self.attn_cross = Attention(hidden_dim, hidden_dim, context_dim=context_dim, num_heads=num_heads)
+        self.norm1 = nn.LayerNorm(hidden_dim)
+        self.norm2 = nn.LayerNorm(hidden_dim)
+        self.norm3 = nn.LayerNorm(hidden_dim)
+        self.ffn = nn.Sequential(
+            nn.Linear(hidden_dim, 4 * hidden_dim),
+            nn.GELU(),
+            nn.Linear(4 * hidden_dim, hidden_dim),
+            nn.GELU()
+        )
+
+    def forward(self, x, context=None):
+        x = self.attn_self(self.norm1(x)) + x
+        x = self.attn_cross(self.norm2(x), context=context) + x
+        x = self.ffn(self.norm3(x)) + x
+        return x
+    
+class SpatialCrossAttention(nn.Module):
+    """
+    Implements a Spatial Cross Attention with multi-head attention applied to spatial data, 
+    typically images.
+
+    Args:
+        hidden_dim (int): The dimensionality of the hidden states.
+        context_dim (int): The dimensionality of the context for cross-attention.
+        num_heads (int): The number of attention heads.
+    """
+    def __init__(self, hidden_dim, context_dim, num_heads=8):
+        super().__init__()
+        self.transformer = TransformerBlock(hidden_dim, context_dim, num_heads=num_heads)
+
+    def forward(self, x, context=None):
+        b, c, h, w = x.shape
+        x_in = x
+        x = rearrange(x, "b c h w -> b (h w) c")
+        x = self.transformer(x, context)
+        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)
+        return x + x_in
+
+class UNet(nn.Module):
+    def __init__(self, channels=[32, 64, 128, 256], embed_dim=256, num_class=10, context_dim=256):
+        super().__init__()
+        self.time_embedding = nn.Sequential(
+            PositionalEmbedding(embed_dim, "sinusoidal"),
+            nn.Linear(embed_dim, embed_dim),
+            nn.GELU()
+        )
         self.act = nn.GELU()
         
         # Considtional embedding
@@ -295,11 +299,8 @@ class UNet(nn.Module):
         
         # Decoding
         h = self.dropout(self.act(self.tgnorm4(self.tconv4(h4) + self.dense5(t_emb))))
-        h = h + h3
         h = self.dropout(self.act(self.tgnorm3(self.tconv3(h + h3) + self.dense6(t_emb))))
-        h = h + h2
         h = self.dropout(self.act(self.tgnorm2(self.tconv2(h + h2) + self.dense7(t_emb))))
-        h = h + h1
-        h = self.tconv1(h)
+        h = self.tconv1(h+h1)
 
         return h
