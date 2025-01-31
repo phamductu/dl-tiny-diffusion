@@ -1,11 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-
-import matplotlib.pyplot as plt
-import numpy as np
 from einops import rearrange
-
 from positional_embeddings import PositionalEmbedding
 
 class Block(nn.Module):
@@ -234,7 +230,7 @@ class SpatialCrossAttention(nn.Module):
         return x + x_in
 
 class UNet(nn.Module):
-    def __init__(self, channels=[32, 64, 128, 256, 512], embed_dim=256, num_class=10, context_dim=256):
+    def __init__(self, data_channels = 1, channels=[32, 64, 128, 256, 512], embed_dim=512, num_class=10, context_dim=512):
         super().__init__()
         self.time_embedding = nn.Sequential(
             PositionalEmbedding(embed_dim, "sinusoidal"),
@@ -250,7 +246,7 @@ class UNet(nn.Module):
         self.dropout = nn.Dropout(p=0.1)
 
         # Encoding blocks
-        self.conv1 = nn.Conv2d(1, channels[0], 3, stride=1, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(data_channels, channels[0], 3, stride=1, padding=1, bias=False)
         self.dense1 = Dense(embed_dim, channels[0])
         self.gnorm1 = nn.GroupNorm(4, num_channels=channels[0])
 
@@ -278,20 +274,29 @@ class UNet(nn.Module):
         self.tconv5 = nn.ConvTranspose2d(channels[4], channels[3], 3, stride=1, padding=1, bias=False)
         self.dense6 = Dense(embed_dim, channels[3])
         self.tgnorm5 = nn.GroupNorm(32, num_channels=channels[3])
+        self.atten6 = SpatialCrossAttention(channels[3], context_dim)
 
-        self.tconv4 = nn.ConvTranspose2d(channels[3], channels[2], 3, stride=2, padding=1, bias=False)
+        if data_channels == 1:
+            self.tconv4 = nn.ConvTranspose2d(channels[3], channels[2], 3, stride=2, padding=1, bias=False)
+        else: 
+            self.tconv4 = nn.ConvTranspose2d(channels[3], channels[2], 3, stride=2, padding=1, bias=False, output_padding=1)
         self.dense7 = Dense(embed_dim, channels[2])
         self.tgnorm4 = nn.GroupNorm(32, num_channels=channels[2])
+        self.atten7 = SpatialCrossAttention(channels[2], context_dim)
 
         self.tconv3 = nn.ConvTranspose2d(channels[2], channels[1], 3, stride=2, padding=1, bias=False, output_padding=1)
         self.dense8 = Dense(embed_dim, channels[1])
         self.tgnorm3 = nn.GroupNorm(32, num_channels=channels[1])
+        self.atten8 = SpatialCrossAttention(channels[1], context_dim)
 
         self.tconv2 = nn.ConvTranspose2d(channels[1], channels[0], 3, stride=2, padding=1, bias=False, output_padding=1)
         self.dense9 = Dense(embed_dim, channels[0])
         self.tgnorm2 = nn.GroupNorm(32, num_channels=channels[0])
+        self.atten9 = SpatialCrossAttention(channels[0], context_dim)
 
-        self.tconv1 = nn.ConvTranspose2d(channels[0], 1, 3, stride=1, padding=1)
+        self.tconv1 = nn.Sequential(
+            nn.ConvTranspose2d(channels[0], data_channels, 3, stride=1, padding=1)
+        )
 
 
     def forward(self, x, t, y=None):
@@ -311,10 +316,14 @@ class UNet(nn.Module):
         h5 = self.atten5(h5, y_emb)
 
         # Decoding
-        h = self.dropout(self.act(self.tgnorm5(self.tconv5(h5) + self.dense6(t_emb))))
-        h = self.dropout(self.act(self.tgnorm4(self.tconv4(h + h4) + self.dense7(t_emb))))
-        h = self.dropout(self.act(self.tgnorm3(self.tconv3(h + h3) + self.dense8(t_emb))))
-        h = self.dropout(self.act(self.tgnorm2(self.tconv2(h + h2) + self.dense9(t_emb))))
+        h = self.dropout(self.act(self.tgnorm5(self.tconv5(h5) + self.dense4(t_emb))))
+        h = self.atten6(h, y_emb)
+        h = self.dropout(self.act(self.tgnorm4(self.tconv4(h + h4) + self.dense3(t_emb))))
+        h = self.atten7(h, y_emb)
+        h = self.dropout(self.act(self.tgnorm3(self.tconv3(h + h3) + self.dense2(t_emb))))
+        h = self.atten8(h, y_emb)
+        h = self.dropout(self.act(self.tgnorm2(self.tconv2(h + h2) + self.dense1(t_emb))))
+        h = self.atten9(h, y_emb)
         h = self.tconv1(h+h1)
 
         return h

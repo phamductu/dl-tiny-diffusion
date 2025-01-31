@@ -14,7 +14,7 @@ def gen(model, sample_shape, config, capture_gap = 50):
     frames = []
     model.to(device)
     model.eval()
-    sample = torch.randn(sample_shape).unsqueeze(0)
+    sample = torch.randn(sample_shape)
     sample = sample.to(device)
     noise_scheduler = NoiseScheduler(
         num_timesteps=config.num_timesteps,
@@ -45,8 +45,8 @@ def gen_table(model, sample_shape, config, n=8):
     
     model.to(device)
     model.eval()
-    samples = torch.randn([n*10] + list(sample_shape)).unsqueeze(0)
-    samples = samples.reshape([n*10, 1] + list(sample_shape)).to(device)
+    samples = torch.randn([n*10] + list(sample_shape))
+    samples = samples.reshape([n*10] + list(sample_shape)).to(device)
     noise_scheduler = NoiseScheduler(
         num_timesteps=config.num_timesteps,
         beta_schedule=config.beta_schedule
@@ -58,7 +58,7 @@ def gen_table(model, sample_shape, config, n=8):
 
         with torch.no_grad():
             residual = model(samples, t, prompt) # constant prompt: torch.from_numpy(np.repeat(7, 1)).long().to(device))
-        samples = noise_scheduler.step(residual.reshape([n*10, 1] + list(sample_shape)), t, samples)
+        samples = noise_scheduler.step(residual.reshape([n*10] + list(sample_shape)), t, samples)
         
     out_grid = torchvision.utils.make_grid(samples).cpu()
     print("Saving images...")
@@ -71,15 +71,20 @@ def gen_table(model, sample_shape, config, n=8):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment_name", type=str, default="base")
-    parser.add_argument("--dataset", type=str, default="mnist", choices=["circle", "dino", "line", "moons", "mnist"])
+    parser.add_argument("--dataset", type=str, default="mnist", choices=["circle", "dino", "line", "moons", "mnist", "cifar10"])
     parser.add_argument("--num_timesteps", type=int, default=1000)
     parser.add_argument("--beta_schedule", type=str, default="linear", choices=["linear", "quadratic"])
     parser.add_argument("--embedding_size", type=int, default=128)
     parser.add_argument("--time_embedding", type=str, default="sinusoidal", choices=["sinusoidal", "learnable", "linear", "zero"])
     parser.add_argument("--table", type=bool, default=False)
     config = parser.parse_args()
-
-    model = UNet()
+    
+    if config.dataset == "mnist":
+        model = UNet()
+        sample_shape = (1, 28, 28)
+    elif config.dataset == "cifar10":
+        model = UNet(data_channels=3)
+        sample_shape = (3, 32, 32)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Number of parameters: {total_params}")
 
@@ -87,6 +92,6 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load(path, weights_only=True))
     model.eval()
     if not config.table:
-        gen(model=model, sample_shape=(28, 28), config=config)
+        gen(model=model, sample_shape=sample_shape, config=config)
     else:
-        gen_table(model=model, sample_shape=(28, 28), config=config)
+        gen_table(model=model, sample_shape=sample_shape, config=config)

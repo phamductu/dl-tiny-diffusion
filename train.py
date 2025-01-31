@@ -108,7 +108,10 @@ def train_mnist(config):
     dataloader = DataLoader(
         dataset, batch_size=config.train_batch_size, shuffle=True, drop_last=True)
 
-    model = UNet()
+    if config.dataset == "mnist":
+        model = UNet()
+    elif config.dataset == "cifar10":
+        model = UNet(data_channels=3)
     
     noise_scheduler = NoiseScheduler(
         num_timesteps=config.num_timesteps,
@@ -150,11 +153,15 @@ def train_mnist(config):
             progress_bar.set_postfix(**logs)
             global_step += 1
         progress_bar.close()
+        if (epoch+1) % 10 == 0:
+            outdir = f"exps/{config.experiment_name}"
+            os.makedirs(outdir, exist_ok=True)
+            torch.save(model.state_dict(), f"{outdir}/{config.dataset}_model@{epoch}epo.pth")
 
     print("Saving model...")
     outdir = f"exps/{config.experiment_name}"
     os.makedirs(outdir, exist_ok=True)
-    torch.save(model.state_dict(), f"{outdir}/model.pth")
+    torch.save(model.state_dict(), f"{outdir}/{config.dataset}_model.pth")
 
     print("Saving loss as numpy array...")
     np.save(f"{outdir}/loss.npy", np.array(losses))
@@ -162,14 +169,14 @@ def train_mnist(config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment_name", type=str, default="base")
-    parser.add_argument("--dataset", type=str, default="mnist", choices=["circle", "dino", "line", "moons", "mnist"])
+    parser.add_argument("--dataset", type=str, default="mnist", choices=["circle", "dino", "line", "moons", "mnist", "cifar10"])
     parser.add_argument("--train_batch_size", type=int, default=32)
     parser.add_argument("--eval_batch_size", type=int, default=1000)
     parser.add_argument("--num_epochs", type=int, default=100)
-    parser.add_argument("--learning_rate", type=float, default=2e-5)
+    parser.add_argument("--learning_rate", type=float, default=2e-4)
     parser.add_argument("--num_timesteps", type=int, default=1000)
     parser.add_argument("--beta_schedule", type=str, default="linear", choices=["linear", "quadratic"])
-    parser.add_argument("--embedding_size", type=int, default=256)
+    parser.add_argument("--embedding_size", type=int, default=512)
     parser.add_argument("--hidden_size", type=int, default=256)
     parser.add_argument("--hidden_layers", type=int, default=3)
     parser.add_argument("--time_embedding", type=str, default="sinusoidal", choices=["sinusoidal", "learnable", "linear", "zero"])
@@ -177,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_images_step", type=int, default=1)
     config = parser.parse_args()
     
-    if config.dataset == "mnist":
+    if config.dataset == "mnist" or config.dataset == "cifar10":
         train_mnist(config)
     else:
         train2d(config)
