@@ -74,7 +74,6 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="mnist", choices=["circle", "dino", "line", "moons", "mnist", "cifar10"])
     parser.add_argument("--num_timesteps", type=int, default=1000)
     parser.add_argument("--beta_schedule", type=str, default="linear", choices=["linear", "quadratic"])
-    parser.add_argument("--embedding_size", type=int, default=128)
     parser.add_argument("--time_embedding", type=str, default="sinusoidal", choices=["sinusoidal", "learnable", "linear", "zero"])
     parser.add_argument("--table", type=bool, default=False)
     config = parser.parse_args()
