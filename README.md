@@ -9,7 +9,7 @@ Get started by running `python train.py -h` to explore the available options for
 
 For MNIST and CIFAR-10, run `python gen.py -h` to see the avaiable options for visualization.
 
-Note: To run the saved models, please go to the corresponding commit.
+**Note**: To run the saved models, please go to the corresponding commit.
 
 To check the performance of the lastest model, run
 
