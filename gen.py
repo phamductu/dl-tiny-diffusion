@@ -75,6 +75,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_timesteps", type=int, default=1000)
     parser.add_argument("--beta_schedule", type=str, default="linear", choices=["linear", "quadratic"])
     parser.add_argument("--time_embedding", type=str, default="sinusoidal", choices=["sinusoidal", "learnable", "linear", "zero"])
+    parser.add_argument("--model_path", type=str, default="exps/base/model.pth")
     parser.add_argument("--table", type=bool, default=False)
     config = parser.parse_args()
     
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Number of parameters: {total_params}")
 
-    path = "exps/base/model.pth"
+    path = config.model_path
     model.load_state_dict(torch.load(path, weights_only=True))
     model.eval()
     if not config.table:

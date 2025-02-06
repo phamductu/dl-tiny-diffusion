@@ -40,6 +40,7 @@ def train2d(config):
     losses = []
     print("Training model...")
     for epoch in range(config.num_epochs):
+        model.to(device)
         model.train()
         progress_bar = tqdm(total=len(dataloader))
         progress_bar.set_description(f"Epoch {epoch}")
@@ -49,7 +50,7 @@ def train2d(config):
             timesteps = torch.randint(
                 0, noise_scheduler.num_timesteps, (batch.shape[0],)
             ).long()
-
+            timesteps, noise, batch = timesteps.to(device), noise.to(device), batch.to(device)
             noisy = noise_scheduler.add_noise(batch, noise, timesteps)
             noise_pred = model(noisy, timesteps)
             loss = F.mse_loss(noise_pred, noise)
@@ -72,10 +73,11 @@ def train2d(config):
             timesteps = list(range(len(noise_scheduler)))[::-1]
             for i, t in enumerate(tqdm(timesteps)):
                 t = torch.from_numpy(np.repeat(t, config.eval_batch_size)).long()
+                sample, t = sample.to(device), t.to(device)
                 with torch.no_grad():
                     residual = model(sample, t)
                 sample = noise_scheduler.step(residual, t[0], sample)
-            frames.append(sample.numpy())
+            frames.append(sample.cpu().numpy())
 
     print("Saving model...")
     outdir = f"exps/{config.experiment_name}"
